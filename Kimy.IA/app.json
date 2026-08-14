@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Kimy.IA",
-    "slug": "Kimy.IA",
-    "version": "1.0.0",
+    "slug": "Kimy-IA",
+    "version": "2.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kimyia",
@@ -37,6 +37,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "93b07d3b-6eb9-4605-916b-81e0abd7f83e"
+      }
     }
   }
 }
