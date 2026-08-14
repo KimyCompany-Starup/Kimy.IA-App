@@ -8,10 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { format, isToday, isYesterday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import * as ImagePicker from 'expo-image-picker';
-// 1. IMPORTACIÓN CORREGIDA PARA VARIABLES DE ENTORNO EN EXPO
 import Constants from 'expo-constants';
 
-// Mapeo seguro y compatible para Localhost y APK
 const GEMINI_API_KEY = 
   Constants.expoConfig?.extra?.expoPublicGeminiApiKey || 
   process.env.EXPO_PUBLIC_GEMINI_API_KEY || 
@@ -91,7 +89,7 @@ export default function ChatScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.7,
@@ -102,9 +100,8 @@ export default function ChatScreen() {
   const sendMessage = async () => {
     if (inputText.trim().length === 0 || isTyping) return;
     
-    // Validación ultra segura
     if (!GEMINI_API_KEY) {
-      showAlert("Falta API Key", "No se encontró la configuración de tu API Key de Gemini.");
+      showAlert("Falta Conexión con la IA", "No se encontró la conexion con la IA.");
       return;
     }
 
@@ -122,7 +119,7 @@ export default function ChatScreen() {
         `Usuario: ${userText}\nKimy.IA:`;
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${GEMINI_API_KEY.trim()}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY.trim()}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -150,10 +147,10 @@ export default function ChatScreen() {
         timestamp: new Date()
       }]);
     } catch (error: any) {
-      console.error("Error al conectar con Gemini API:", error);
-      let fallbackText = '¡Ups! Algo falló al procesar con Gemini. Revisa tu conexión e intenta de nuevo.';
+      console.error("Error al conectar con la IA:", error);
+      let fallbackText = '¡Ups! Algo falló al procesar con la IA. Revisa tu conexión e intenta de nuevo.';
       if (error.status === 400) {
-        fallbackText = `¡Ay! Algo no anda bien con la clave de acceso de la IA. Por favor, asegúrate de reiniciar el servidor Expo de tu app. 🔑`;
+        fallbackText = `¡Ay! Algo no anda bien con la IA. No pude procesar tu mensaje, ${username}. 😢 Por favor, intenta de nuevo.`;
       } else if (error.status === 503) {
         fallbackText = `¡Ay! Lo siento mucho, ${username}, pero mis servidores están súper llenos en este momento. 😭 Por fis espera unos segunditos y vuelve a intentarlo. ✨`;
       }
@@ -324,57 +321,335 @@ export default function ChatScreen() {
   );
 }
 
-// ESTILOS (Permanecen intactos)
 const styles = StyleSheet.create({
-  container: 
-  { 
+  container: { 
     flex: 1, 
     backgroundColor: '#000' 
   },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 15, backgroundColor: '#0a0a0a', borderBottomWidth: 0.5, borderBottomColor: '#FF1493', justifyContent: 'space-between' },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerAvatar: { width: 45, height: 45, borderRadius: 22.5, borderWidth: 1, borderColor: '#FF1493' },
-  headerTextContainer: { marginLeft: 10 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  headerStatus: { color: '#FF1493', fontSize: 12 },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
-  actionIcon: { marginLeft: 15, padding: 5 },
-  listContent: { padding: 15 },
-  dateContainer: { alignSelf: 'center', backgroundColor: '#1e1e1e', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, marginVertical: 15 },
-  dateText: { color: '#aaa', fontSize: 12, fontWeight: 'bold' },
-  messageRow: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-end', maxWidth: '85%' },
-  userRow: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
-  kimyRow: { alignSelf: 'flex-start' },
-  chatAvatarRow: { width: 34, height: 34, borderRadius: 17, marginHorizontal: 8, backgroundColor: '#222' },
-  rowPlaceholder: { justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#444' },
-  bubble: { padding: 12, borderRadius: 18, maxWidth: '85%' },
-  userBubble: { backgroundColor: '#1A1A1A', borderBottomRightRadius: 2, borderWidth: 0.5, borderColor: '#FF1493' },
-  kimyBubble: { backgroundColor: '#2D101E', borderBottomLeftRadius: 2 },
-  usernameTag: { color: '#FF1493', fontSize: 11, fontWeight: 'bold', marginBottom: 3 },
-  messageText: { color: '#fff', fontSize: 16 },
-  timeText: { color: '#888', fontSize: 10, alignSelf: 'flex-end', marginTop: 4, textTransform: 'lowercase' },
-  typingContainer: { flexDirection: 'row', paddingHorizontal: 20, alignItems: 'center', marginBottom: 10 },
-  typingText: { color: '#aaa', fontSize: 13, marginLeft: 8 },
-  footer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#000' },
-  inputContainer: { flex: 1, flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 25, alignItems: 'center', minHeight: 50, paddingRight: 15 },
-  input: { flex: 1, color: '#fff', marginLeft: 15, fontSize: 16, maxHeight: 100 },
-  sendButton: { backgroundColor: '#FF1493', width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
-  backButton: { padding: 5 },
-  settingsContent: { flex: 1, padding: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
-  settingsAvatarPreview: { width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#FF1493', marginBottom: 30 },
-  avatarPlaceholder: { backgroundColor: '#111', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FF1493', borderStyle: 'dashed' },
-  placeholderText: { color: '#666', fontSize: 12, marginTop: 5 },
-  label: { color: '#FF1493', alignSelf: 'flex-start', fontSize: 14, fontWeight: 'bold', marginBottom: 8, marginLeft: 5 },
-  settingsInput: { width: '100%', backgroundColor: '#1A1A1A', color: '#fff', padding: 15, borderRadius: 12, fontSize: 16, marginBottom: 20, borderWidth: 1, borderColor: '#333' },
-  saveButton: { backgroundColor: '#FF1493', width: '100%', padding: 15, borderRadius: 25, alignItems: 'center', marginTop: 10 },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  alertOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 25 },
-  alertBox: { width: '100%', backgroundColor: '#0a0a0a', borderRadius: 16, padding: 20, borderWidth: 2, borderColor: '#FF1493', shadowColor: '#FF1493', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 15, elevation: 15 },
-  alertTitle: { color: '#FF1493', fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
-  alertMessage: { color: '#fff', fontSize: 15, marginBottom: 20, textAlign: 'center', lineHeight: 22 },
-  alertButtonsContainer: { flexDirection: 'row', justifyContent: 'space-around', gap: 10 },
-  alertButton: { flex: 1, paddingVertical: 12, borderRadius: 25, backgroundColor: '#1a1a1a', alignItems: 'center', borderWidth: 0.5, borderColor: '#444' },
-  alertBtnDestructive: { backgroundColor: '#2d1014', borderColor: '#ff3b30' },
-  alertButtonText: { color: '#FF1493', fontSize: 15, fontWeight: 'bold' },
-  alertBtnCancelText: { color: '#aaa' }
+  header: 
+  { flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 15, 
+    backgroundColor: '#0a0a0a', 
+    borderBottomWidth: 0.5, 
+    borderBottomColor: '#FF1493', 
+    justifyContent: 'space-between' 
+  },
+  headerLeft: 
+  { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  headerAvatar: 
+  { width: 45, 
+    height: 45, 
+    borderRadius: 22.5, 
+    borderWidth: 1, 
+    borderColor: '#FF1493' 
+  },
+  headerTextContainer: 
+  { 
+    marginLeft: 10 
+  },
+  headerTitle: 
+  { 
+    color: '#fff', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
+  headerStatus: 
+  { 
+    color: '#FF1493', 
+    fontSize: 12 
+  },
+  headerActions: 
+  { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  actionIcon: 
+  { 
+    marginLeft: 15, 
+    padding: 5 
+  },
+  listContent: 
+  { 
+    padding: 15 
+  },
+  dateContainer: 
+  { 
+    alignSelf: 'center', 
+    backgroundColor: '#1e1e1e', 
+    paddingHorizontal: 12, 
+    paddingVertical: 4, 
+    borderRadius: 10, 
+    marginVertical: 15 
+  },
+  dateText: 
+  { 
+    color: '#aaa', 
+    fontSize: 12, 
+    fontWeight: 'bold' 
+  },
+  messageRow: 
+  { 
+    flexDirection: 'row', 
+    marginBottom: 12, 
+    alignItems: 'flex-end', 
+    maxWidth: '85%' 
+  },
+  userRow: 
+  { 
+    alignSelf: 'flex-end', 
+    flexDirection: 'row-reverse' 
+  },
+  kimyRow: 
+  { 
+    alignSelf: 'flex-start' 
+  },
+  chatAvatarRow: 
+  { 
+    width: 34, 
+    height: 34, 
+    borderRadius: 17, 
+    marginHorizontal: 8, 
+    backgroundColor: '#222' 
+  },
+  rowPlaceholder: 
+  { 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderWidth: 1, 
+    borderColor: '#444' 
+  },
+  bubble: 
+  { 
+    padding: 12, 
+    borderRadius: 18, 
+    maxWidth: '85%' 
+  },
+  userBubble: 
+  { 
+    backgroundColor: '#1A1A1A', 
+    borderBottomRightRadius: 2, 
+    borderWidth: 0.5, 
+    borderColor: '#FF1493' 
+  },
+  kimyBubble: 
+  { 
+    backgroundColor: '#2D101E', 
+    borderBottomLeftRadius: 2 
+  },
+  usernameTag: 
+  { 
+    color: '#FF1493', 
+    fontSize: 11, 
+    fontWeight: 'bold', 
+    marginBottom: 3 
+  },
+  messageText: 
+  { 
+    color: '#fff', 
+    fontSize: 16 
+  },
+  timeText: 
+  { 
+    color: '#888', 
+    fontSize: 10, 
+    alignSelf: 'flex-end', 
+    marginTop: 4, 
+    textTransform: 'lowercase' 
+  },
+  typingContainer: 
+  { 
+    flexDirection: 'row', 
+    paddingHorizontal: 20, 
+    alignItems: 'center', 
+    marginBottom: 10 
+  },
+  typingText: 
+  { 
+    color: '#aaa', 
+    fontSize: 13, 
+    marginLeft: 8 
+  },
+  footer: 
+  { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 10, 
+    paddingVertical: 10, 
+    backgroundColor: '#000' 
+  },
+  inputContainer: 
+  { 
+    flex: 1, 
+    flexDirection: 'row', 
+    backgroundColor: '#1A1A1A', 
+    borderRadius: 25, 
+    alignItems: 'center', 
+    minHeight: 50, 
+    paddingRight: 15 
+  },
+  input: 
+  { 
+    flex: 1, 
+    color: '#fff', 
+    marginLeft: 15, 
+    fontSize: 16, 
+    maxHeight: 100 
+  },
+  sendButton: 
+  { 
+    backgroundColor: '#FF1493', 
+    width: 50, 
+    height: 50, 
+    borderRadius: 25, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginLeft: 8 
+  },
+  backButton: 
+  { 
+    padding: 5 
+  },
+  settingsContent: 
+  { 
+    flex: 1, 
+    padding: 20, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    backgroundColor: '#000' 
+  },
+  settingsAvatarPreview: 
+  { 
+    width: 120, 
+    height: 120, 
+    borderRadius: 60, 
+    borderWidth: 2, 
+    borderColor: '#FF1493', 
+    marginBottom: 30 
+  },
+  avatarPlaceholder: 
+  { 
+    backgroundColor: '#111', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderWidth: 1, 
+    borderColor: '#FF1493', 
+    borderStyle: 'dashed' },
+  placeholderText: 
+  { 
+    color: '#666', 
+    fontSize: 12, 
+    marginTop: 5 
+  },
+  label: 
+  { 
+    color: '#FF1493', 
+    alignSelf: 'flex-start', 
+    fontSize: 14, fontWeight: 'bold', 
+    marginBottom: 8, 
+    marginLeft: 5 
+  },
+  settingsInput: 
+  { 
+    width: '100%', 
+    backgroundColor: '#1A1A1A', 
+    color: '#fff', 
+    padding: 15, 
+    borderRadius: 12, 
+    fontSize: 16, 
+    marginBottom: 20, 
+    borderWidth: 1, 
+    borderColor: '#333' 
+  },
+  saveButton: 
+  { 
+    backgroundColor: '#FF1493', 
+    width: '100%', 
+    padding: 15, 
+    borderRadius: 25, 
+    alignItems: 'center', 
+    marginTop: 10 
+  },
+  saveButtonText: 
+  { 
+    color: '#fff', 
+    fontSize: 16, 
+    fontWeight: 'bold' 
+  },
+  alertOverlay: 
+  { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.75)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 25 
+  },
+  alertBox: 
+  { 
+    width: '100%', 
+    backgroundColor: '#0a0a0a', 
+    borderRadius: 16, 
+    padding: 20, 
+    borderWidth: 2, 
+    borderColor: '#FF1493', 
+    shadowColor: '#FF1493', 
+    shadowOffset: 
+    { 
+      width: 0, 
+      height: 0 
+    }, 
+    shadowOpacity: 0.9, 
+    shadowRadius: 15, 
+    elevation: 15 
+  },
+  alertTitle: 
+  { 
+    color: '#FF1493', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 10, 
+    textAlign: 'center' 
+  },
+  alertMessage: 
+  { 
+    color: '#fff', 
+    fontSize: 15, 
+    marginBottom: 20, 
+    textAlign: 'center', 
+    lineHeight: 22 
+  },
+  alertButtonsContainer: 
+  { 
+    flexDirection: 'row', 
+    justifyContent: 'space-around', 
+    gap: 10 
+  },
+  alertButton: 
+  { 
+    flex: 1, 
+    paddingVertical: 12, 
+    borderRadius: 25, 
+    backgroundColor: '#1a1a1a', 
+    alignItems: 'center', 
+    borderWidth: 0.5, 
+    borderColor: '#444' 
+  },
+  alertBtnDestructive: 
+  { 
+    backgroundColor: '#2d1014', 
+    borderColor: '#ff3b30' 
+  },
+  alertButtonText: 
+  { 
+    color: '#FF1493', 
+    fontSize: 15, 
+    fontWeight: 'bold' 
+  },
+  alertBtnCancelText: 
+  { 
+    color: '#aaa' 
+  }
 });
