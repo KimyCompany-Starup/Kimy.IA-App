@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList,
-  Keyboard, StatusBar, Image, ActivityIndicator, Modal
+  Keyboard, StatusBar, Image, ActivityIndicator, Modal, Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { format, isToday, isYesterday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const GEMINI_API_KEY = 
   Constants.expoConfig?.extra?.expoPublicGeminiApiKey || 
@@ -16,6 +17,10 @@ const GEMINI_API_KEY =
   "";
 
 const BOT_IMAGE_LOCAL = require('../../assets/images/kimy_avatar.png');
+
+const STORAGE_KEY_MESSAGES = '@kimy_chat_messages';
+const STORAGE_KEY_USERNAME = '@kimy_username';
+const STORAGE_KEY_USERPHOTO = '@kimy_user_photo';
 
 interface Message {
   id: string;
@@ -31,6 +36,93 @@ interface AlertConfig {
   buttons: Array<{ text: string; style?: 'cancel' | 'destructive' | 'default'; onPress?: () => void }>;
 }
 
+// Red Neuronal en Malla Geométrica Estilo Poligonal con CSS Puro
+const NeuralNetworkPureCSS = () => {
+  const anim1 = useRef(new Animated.Value(0.15)).current;
+  const anim2 = useRef(new Animated.Value(0.7)).current;
+  const anim3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const createPulse = (anim: Animated.Value, duration: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, { toValue: 0.85, duration: duration, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0.15, duration: duration, useNativeDriver: true }),
+        ])
+      );
+    };
+
+    const p1 = createPulse(anim1, 3500);
+    const p2 = createPulse(anim2, 5000);
+    const p3 = createPulse(anim3, 2800);
+
+    p1.start();
+    p2.start();
+    p3.start();
+
+    return () => {
+      p1.stop();
+      p2.stop();
+      p3.stop();
+    };
+  }, []);
+
+  const nodes = [
+    { top: 90, left: 50, anim: anim1 },
+    { top: 140, left: 180, anim: anim2 },
+    { top: 80, left: 310, anim: anim3 },
+    { top: 240, left: 100, anim: anim3 },
+    { top: 220, left: 260, anim: anim1 },
+    { top: 350, left: 170, anim: anim2 },
+    { top: 430, left: 60, anim: anim1 },
+    { top: 480, left: 320, anim: anim3 },
+    { top: 580, left: 210, anim: anim2 },
+    { top: 670, left: 90, anim: anim3 },
+    { top: 730, left: 280, anim: anim1 },
+    { top: 830, left: 150, anim: anim2 },
+  ];
+
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      <Animated.View style={[styles.cssLine, { top: 110, left: 60, width: 140, transform: [{ rotate: '35deg' }], opacity: anim1 }]} />
+      <Animated.View style={[styles.cssLine, { top: 110, left: 170, width: 150, transform: [{ rotate: '-25deg' }], opacity: anim2 }]} />
+      <Animated.View style={[styles.cssLine, { top: 160, left: 80, width: 210, transform: [{ rotate: '65deg' }], opacity: anim3 }]} />
+      
+      <Animated.View style={[styles.cssLine, { top: 260, left: 110, width: 170, transform: [{ rotate: '-40deg' }], opacity: anim2 }]} />
+      <Animated.View style={[styles.cssLine, { top: 240, left: 200, width: 140, transform: [{ rotate: '20deg' }], opacity: anim1 }]} />
+      
+      <Animated.View style={[styles.cssLine, { top: 380, left: 70, width: 180, transform: [{ rotate: '15deg' }], opacity: anim3 }]} />
+      <Animated.View style={[styles.cssLine, { top: 370, left: 180, width: 160, transform: [{ rotate: '-50deg' }], opacity: anim1 }]} />
+      
+      <Animated.View style={[styles.cssLine, { top: 510, left: 90, width: 250, transform: [{ rotate: '30deg' }], opacity: anim2 }]} />
+      <Animated.View style={[styles.cssLine, { top: 600, left: 120, width: 180, transform: [{ rotate: '-15deg' }], opacity: anim3 }]} />
+      
+      <Animated.View style={[styles.cssLine, { top: 710, left: 100, width: 200, transform: [{ rotate: '45deg' }], opacity: anim1 }]} />
+      <Animated.View style={[styles.cssLine, { top: 760, left: 200, width: 150, transform: [{ rotate: '-35deg' }], opacity: anim2 }]} />
+
+      {nodes.map((node, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            styles.cssNodeSmall,
+            {
+              top: node.top,
+              left: node.left,
+              opacity: node.anim,
+              transform: [{
+                scale: node.anim.interpolate({
+                  inputRange: [0.15, 0.85],
+                  outputRange: [0.7, 1.4]
+                })
+              }]
+            }
+          ]}
+        />
+      ))}
+    </View>
+  );
+};
+
 export default function ChatScreen() {
   const [currentScreen, setCurrentScreen] = useState<'chat' | 'settings'>('chat');
   const [username, setUsername] = useState('Usuario');
@@ -39,12 +131,53 @@ export default function ChatScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { id: '1', text: '¡Hola! Soy Kimy.IA 💖 ¿De qué te gustaría hablar hoy?', sender: 'kimy', timestamp: new Date() },
+    { id: '1', text: '¡Hola! Soy Kimy.IA. ¿De qué te gustaría hablar hoy?', sender: 'kimy', timestamp: new Date() },
   ]);
 
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({
     visible: false, title: '', message: '', buttons: []
   });
+
+  useEffect(() => {
+    loadCachedData();
+  }, []);
+
+  const loadCachedData = async () => {
+    try {
+      const savedUsername = await AsyncStorage.getItem(STORAGE_KEY_USERNAME);
+      if (savedUsername) setUsername(savedUsername);
+
+      const savedPhoto = await AsyncStorage.getItem(STORAGE_KEY_USERPHOTO);
+      if (savedPhoto) setUserPhoto(savedPhoto);
+
+      const savedMessages = await AsyncStorage.getItem(STORAGE_KEY_MESSAGES);
+      if (savedMessages) {
+        const parsed = JSON.parse(savedMessages).map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp)
+        }));
+        if (parsed.length > 0) setMessages(parsed);
+      }
+    } catch (error) {
+      console.error("Error al cargar datos de caché:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (messages.length > 1) {
+      AsyncStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messages));
+    }
+  }, [messages]);
+
+  const saveUsernameToCache = async (name: string) => {
+    setUsername(name);
+    await AsyncStorage.setItem(STORAGE_KEY_USERNAME, name);
+  };
+
+  const savePhotoToCache = async (uri: string) => {
+    setUserPhoto(uri);
+    await AsyncStorage.setItem(STORAGE_KEY_USERPHOTO, uri);
+  };
 
   const showAlert = (title: string, message: string, buttons: AlertConfig['buttons'] = [{ text: 'OK' }]) => {
     setAlertConfig({ visible: true, title, message, buttons });
@@ -74,9 +207,11 @@ export default function ChatScreen() {
         {
           text: "Borrar todo",
           style: "destructive",
-          onPress: () => setMessages([
-            { id: Date.now().toString(), text: '¡Hola! Soy Kimy.IA 💖 ¿En qué puedo ayudarte hoy?', sender: 'kimy', timestamp: new Date() }
-          ])
+          onPress: async () => {
+            const initialMsg: Message[] = [{ id: Date.now().toString(), text: '¡Hola! Soy Kimy.IA. ¿En qué puedo ayudarte hoy?', sender: 'kimy', timestamp: new Date() }];
+            setMessages(initialMsg);
+            await AsyncStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(initialMsg));
+          }
         }
       ]
     );
@@ -94,7 +229,9 @@ export default function ChatScreen() {
       aspect: [1, 1],
       quality: 0.7,
     });
-    if (!result.canceled) setUserPhoto(result.assets[0].uri);
+    if (!result.canceled && result.assets[0].uri) {
+      savePhotoToCache(result.assets[0].uri);
+    }
   };
 
   const sendMessage = async () => {
@@ -108,24 +245,31 @@ export default function ChatScreen() {
     const userText = inputText;
     const newMessage: Message = { id: Date.now().toString(), text: userText, sender: 'user', timestamp: new Date() };
 
-    setMessages(prev => [...prev, newMessage]);
+    const updatedMessages = [...messages, newMessage];
+    setMessages(updatedMessages);
     setInputText('');
     setIsTyping(true);
 
     try {
+      const recentHistory = updatedMessages.slice(-10).map(m => {
+        return `${m.sender === 'user' ? username : 'Kimy.IA'}: ${m.text}`;
+      }).join('\n');
+
       const promptConContexto =
-        `Eres Kimy.IA, una asistente virtual en español amigable, carismática, alegre y muy atenta. Te estás comunicando con tu usuario preferido: ${username}. Responde siempre manteniendo esta personalidad, sé natural, fluida y usa emojis acordes a ti.\n\n` +
-        `⚠️ REGLA IMPORTANTE: No tienes acceso a internet ni datos en tiempo real. Si el usuario te pregunta por el clima actual, la hora exacta, noticias de hoy o eventos en tiempo real, debes responder con mucha amabilidad, carisma y emojis explicando que por el momento no puedes ayudarle con información en tiempo real, pero que estás lista para hablar de cualquier otra cosa divertida.\n\n` +
-        `Usuario: ${userText}\nKimy.IA:`;
+        `Eres Kimy.IA, una asistente virtual en español amigable, atenta y servicial. Te estás comunicando con ${username}.\n` +
+        `⚠️ IMPORTANTE SOBRE EL TONO: Sé empática y educada, pero mantén un trato equilibrado y natural. Evita usar expresiones demasiado cariñosas o excesivas que puedan resultar incómodas o invasivas para el usuario.\n\n` +
+        `⚠️ REGLA IMPORTANTE: No tienes acceso a internet ni datos en tiempo real. Si el usuario te pregunta por el clima actual, la hora exacta, noticias de hoy o eventos en tiempo real, debes responder con amabilidad explicando que por el momento no puedes ayudarle con información en tiempo real.\n\n` +
+        `Historial reciente de la conversación:\n${recentHistory}\n\n` +
+        `Kimy.IA:`;
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY.trim()}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY.trim()}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: promptConContexto }] }],
-            generationConfig: { maxOutputTokens: 1000, temperature: 0.7 }
+            generationConfig: { maxOutputTokens: 2000, temperature: 0.7 }
           })
         }
       );
@@ -150,9 +294,9 @@ export default function ChatScreen() {
       console.error("Error al conectar con la IA:", error);
       let fallbackText = '¡Ups! Algo falló al procesar con la IA. Revisa tu conexión e intenta de nuevo.';
       if (error.status === 400) {
-        fallbackText = `¡Ay! Algo no anda bien con la IA. No pude procesar tu mensaje, ${username}. 😢 Por favor, intenta de nuevo.`;
+        fallbackText = `Algo no anda bien con la IA. No pude procesar tu mensaje, ${username}. Por favor, intenta de nuevo.`;
       } else if (error.status === 503) {
-        fallbackText = `¡Ay! Lo siento mucho, ${username}, pero mis servidores están súper llenos en este momento. 😭 Por fis espera unos segunditos y vuelve a intentarlo. ✨`;
+        fallbackText = `Lo siento mucho, ${username}, pero mis servidores están ocupados en este momento. Espera unos segundos y vuelve a intentarlo.`;
       }
       setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), text: fallbackText, sender: 'kimy', timestamp: new Date() }]);
     } finally {
@@ -191,6 +335,7 @@ export default function ChatScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+        <NeuralNetworkPureCSS />
         <NeonAlert />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setCurrentScreen('chat')} style={styles.backButton}>
@@ -216,7 +361,7 @@ export default function ChatScreen() {
           <TextInput
             style={styles.settingsInput}
             value={username}
-            onChangeText={setUsername}
+            onChangeText={saveUsernameToCache}
             placeholder="Escribe tu nombre..."
             placeholderTextColor="#666"
           />
@@ -231,6 +376,7 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+      <NeuralNetworkPureCSS />
       <NeonAlert />
 
       <View style={styles.header}>
@@ -326,181 +472,177 @@ const styles = StyleSheet.create({
     flex: 1, 
     backgroundColor: '#000' 
   },
-  header: 
-  { flexDirection: 'row', 
+  cssNodeSmall: {
+    position: 'absolute',
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#FF1493',
+    shadowColor: '#FF1493',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  cssLine: {
+    position: 'absolute',
+    height: 0.8,
+    backgroundColor: 'rgba(255, 20, 147, 0.22)',
+  },
+  header: { 
+    flexDirection: 'row', 
     alignItems: 'center', 
     padding: 15, 
-    backgroundColor: '#0a0a0a', 
+    backgroundColor: 'rgba(10,10,10,0.9)', 
     borderBottomWidth: 0.5, 
     borderBottomColor: '#FF1493', 
     justifyContent: 'space-between' 
   },
-  headerLeft: 
-  { 
+  headerLeft: { 
     flexDirection: 'row', 
     alignItems: 'center' 
   },
-  headerAvatar: 
-  { width: 45, 
+  headerAvatar: { 
+    width: 45, 
     height: 45, 
     borderRadius: 22.5, 
     borderWidth: 1, 
     borderColor: '#FF1493' 
   },
-  headerTextContainer: 
-  { 
+  headerTextContainer: { 
     marginLeft: 10 
   },
-  headerTitle: 
-  { 
+  headerTitle: { 
     color: '#fff', 
     fontSize: 18, 
     fontWeight: 'bold' 
   },
-  headerStatus: 
-  { 
+  headerStatus: { 
     color: '#FF1493', 
     fontSize: 12 
   },
-  headerActions: 
-  { 
+  headerActions: { 
     flexDirection: 'row', 
     alignItems: 'center' 
   },
-  actionIcon: 
-  { 
+  actionIcon: { 
     marginLeft: 15, 
     padding: 5 
   },
-  listContent: 
-  { 
+  listContent: { 
     padding: 15 
   },
-  dateContainer: 
-  { 
+  dateContainer: { 
     alignSelf: 'center', 
-    backgroundColor: '#1e1e1e', 
+    backgroundColor: 'rgba(30,30,30,0.85)', 
     paddingHorizontal: 12, 
     paddingVertical: 4, 
     borderRadius: 10, 
     marginVertical: 15 
   },
-  dateText: 
-  { 
+  dateText: { 
     color: '#aaa', 
     fontSize: 12, 
     fontWeight: 'bold' 
   },
-  messageRow: 
-  { 
+  messageRow: { 
     flexDirection: 'row', 
     marginBottom: 12, 
     alignItems: 'flex-end', 
     maxWidth: '85%' 
   },
-  userRow: 
-  { 
+  userRow: { 
     alignSelf: 'flex-end', 
     flexDirection: 'row-reverse' 
   },
-  kimyRow: 
-  { 
+  kimyRow: { 
     alignSelf: 'flex-start' 
   },
-  chatAvatarRow: 
-  { 
+  chatAvatarRow: { 
     width: 34, 
     height: 34, 
     borderRadius: 17, 
     marginHorizontal: 8, 
     backgroundColor: '#222' 
   },
-  rowPlaceholder: 
-  { 
+  rowPlaceholder: { 
     justifyContent: 'center', 
     alignItems: 'center', 
     borderWidth: 1, 
     borderColor: '#444' 
   },
-  bubble: 
-  { 
+  bubble: { 
     padding: 12, 
     borderRadius: 18, 
     maxWidth: '85%' 
   },
-  userBubble: 
-  { 
-    backgroundColor: '#1A1A1A', 
+  userBubble: { 
+    backgroundColor: 'rgba(26,26,26,0.9)', 
     borderBottomRightRadius: 2, 
     borderWidth: 0.5, 
     borderColor: '#FF1493' 
   },
-  kimyBubble: 
-  { 
-    backgroundColor: '#2D101E', 
+  kimyBubble: { 
+    backgroundColor: 'rgba(45,16,30,0.9)', 
     borderBottomLeftRadius: 2 
   },
-  usernameTag: 
-  { 
+  usernameTag: { 
     color: '#FF1493', 
     fontSize: 11, 
     fontWeight: 'bold', 
     marginBottom: 3 
   },
-  messageText: 
-  { 
+  messageText: { 
     color: '#fff', 
     fontSize: 16 
   },
-  timeText: 
-  { 
+  timeText: { 
     color: '#888', 
     fontSize: 10, 
     alignSelf: 'flex-end', 
     marginTop: 4, 
     textTransform: 'lowercase' 
   },
-  typingContainer: 
-  { 
+  typingContainer: { 
     flexDirection: 'row', 
     paddingHorizontal: 20, 
     alignItems: 'center', 
-    marginBottom: 10 
+    marginBottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    paddingVertical: 4,
+    marginLeft: 15
   },
-  typingText: 
-  { 
+  typingText: { 
     color: '#aaa', 
     fontSize: 13, 
     marginLeft: 8 
   },
-  footer: 
-  { 
+  footer: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     paddingHorizontal: 10, 
     paddingVertical: 10, 
-    backgroundColor: '#000' 
+    backgroundColor: 'rgba(0,0,0,0.85)' 
   },
-  inputContainer: 
-  { 
+  inputContainer: { 
     flex: 1, 
     flexDirection: 'row', 
-    backgroundColor: '#1A1A1A', 
+    backgroundColor: 'rgba(26,26,26,0.9)', 
     borderRadius: 25, 
     alignItems: 'center', 
     minHeight: 50, 
     paddingRight: 15 
   },
-  input: 
-  { 
+  input: { 
     flex: 1, 
     color: '#fff', 
     marginLeft: 15, 
     fontSize: 16, 
     maxHeight: 100 
   },
-  sendButton: 
-  { 
+  sendButton: { 
     backgroundColor: '#FF1493', 
     width: 50, 
     height: 50, 
@@ -509,20 +651,17 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginLeft: 8 
   },
-  backButton: 
-  { 
+  backButton: { 
     padding: 5 
   },
-  settingsContent: 
-  { 
+  settingsContent: { 
     flex: 1, 
     padding: 20, 
     alignItems: 'center', 
     justifyContent: 'center', 
-    backgroundColor: '#000' 
+    backgroundColor: 'transparent' 
   },
-  settingsAvatarPreview: 
-  { 
+  settingsAvatarPreview: { 
     width: 120, 
     height: 120, 
     borderRadius: 60, 
@@ -530,32 +669,30 @@ const styles = StyleSheet.create({
     borderColor: '#FF1493', 
     marginBottom: 30 
   },
-  avatarPlaceholder: 
-  { 
-    backgroundColor: '#111', 
+  avatarPlaceholder: { 
+    backgroundColor: 'rgba(17,17,17,0.8)', 
     justifyContent: 'center', 
     alignItems: 'center', 
     borderWidth: 1, 
     borderColor: '#FF1493', 
-    borderStyle: 'dashed' },
-  placeholderText: 
-  { 
+    borderStyle: 'dashed' 
+  },
+  placeholderText: { 
     color: '#666', 
     fontSize: 12, 
     marginTop: 5 
   },
-  label: 
-  { 
+  label: { 
     color: '#FF1493', 
     alignSelf: 'flex-start', 
-    fontSize: 14, fontWeight: 'bold', 
+    fontSize: 14, 
+    fontWeight: 'bold', 
     marginBottom: 8, 
     marginLeft: 5 
   },
-  settingsInput: 
-  { 
+  settingsInput: { 
     width: '100%', 
-    backgroundColor: '#1A1A1A', 
+    backgroundColor: 'rgba(26,26,26,0.9)', 
     color: '#fff', 
     padding: 15, 
     borderRadius: 12, 
@@ -564,8 +701,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, 
     borderColor: '#333' 
   },
-  saveButton: 
-  { 
+  saveButton: { 
     backgroundColor: '#FF1493', 
     width: '100%', 
     padding: 15, 
@@ -573,22 +709,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginTop: 10 
   },
-  saveButtonText: 
-  { 
+  saveButtonText: { 
     color: '#fff', 
     fontSize: 16, 
     fontWeight: 'bold' 
   },
-  alertOverlay: 
-  { 
+  alertOverlay: { 
     flex: 1, 
     backgroundColor: 'rgba(0,0,0,0.75)', 
     justifyContent: 'center', 
     alignItems: 'center', 
     padding: 25 
   },
-  alertBox: 
-  { 
+  alertBox: { 
     width: '100%', 
     backgroundColor: '#0a0a0a', 
     borderRadius: 16, 
@@ -596,39 +729,31 @@ const styles = StyleSheet.create({
     borderWidth: 2, 
     borderColor: '#FF1493', 
     shadowColor: '#FF1493', 
-    shadowOffset: 
-    { 
-      width: 0, 
-      height: 0 
-    }, 
+    shadowOffset: { width: 0, height: 0 }, 
     shadowOpacity: 0.9, 
     shadowRadius: 15, 
     elevation: 15 
   },
-  alertTitle: 
-  { 
+  alertTitle: { 
     color: '#FF1493', 
     fontSize: 18, 
     fontWeight: 'bold', 
     marginBottom: 10, 
     textAlign: 'center' 
   },
-  alertMessage: 
-  { 
+  alertMessage: { 
     color: '#fff', 
     fontSize: 15, 
     marginBottom: 20, 
     textAlign: 'center', 
     lineHeight: 22 
   },
-  alertButtonsContainer: 
-  { 
+  alertButtonsContainer: { 
     flexDirection: 'row', 
     justifyContent: 'space-around', 
     gap: 10 
   },
-  alertButton: 
-  { 
+  alertButton: { 
     flex: 1, 
     paddingVertical: 12, 
     borderRadius: 25, 
@@ -637,19 +762,16 @@ const styles = StyleSheet.create({
     borderWidth: 0.5, 
     borderColor: '#444' 
   },
-  alertBtnDestructive: 
-  { 
+  alertBtnDestructive: { 
     backgroundColor: '#2d1014', 
     borderColor: '#ff3b30' 
   },
-  alertButtonText: 
-  { 
+  alertButtonText: { 
     color: '#FF1493', 
     fontSize: 15, 
     fontWeight: 'bold' 
   },
-  alertBtnCancelText: 
-  { 
+  alertBtnCancelText: { 
     color: '#aaa' 
   }
 });
