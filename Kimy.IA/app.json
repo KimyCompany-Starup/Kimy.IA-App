@@ -2,14 +2,14 @@
   "expo": {
     "name": "Kimy.IA",
     "slug": "Kimy-IA",
-    "version": "V2.6",
+    "version": "V2.7",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kimyia",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "buildNumber": "V2.6"
+      "buildNumber": "V2.7"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "package": "com.kimycompany.KimyIA",
-      "versionCode": 600
+      "versionCode": 700
     },
     "web": {
       "output": "static",
