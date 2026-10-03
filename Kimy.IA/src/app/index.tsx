@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList,
-  Keyboard, StatusBar, Image, ActivityIndicator, Modal, Platform, KeyboardAvoidingView
+  View, Text, TextInput, TouchableOpacity, FlatList,
+  StatusBar, Image, ActivityIndicator, Modal, Platform, KeyboardAvoidingView, Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,12 +11,16 @@ import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import { styles } from '../styles'; // Asegúrate de haber movido styles.ts fuera de src/app/
 
-// --- Configuración Segura de la API Key ---
-const getApiKey = () => {
-  const keyFromConfig = Constants.expoConfig?.extra?.expoPublicGeminiApiKey;
-  const keyFromEnv = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  return (keyFromConfig || keyFromEnv || "").trim();
+// --- Configuración Dinámica desde Constants (app.json / .env) ---
+const getGroqConfig = () => {
+  const extra = Constants.expoConfig?.extra || {};
+  
+  const apiKey = (extra.expoPublicGroqApiKey || process.env.EXPO_PUBLIC_GROQ_API_KEY || "").trim();
+  const model = (extra.expoPublicGroqModel || process.env.EXPO_PUBLIC_GROQ_MODEL || "qwen/qwen3.8-27b").trim();
+
+  return { apiKey, model };
 };
 
 const BOT_IMAGE_LOCAL = require('../../assets/images/kimy_avatar.png');
@@ -39,6 +43,73 @@ interface AlertConfig {
   buttons: Array<{ text: string; style?: 'cancel' | 'destructive' | 'default'; onPress?: () => void }>;
 }
 
+// ==========================================
+// --- FUNCIONES DE HERRAMIENTAS (TOOLS) ---
+// ==========================================
+
+const obtenerClimaCiudad = async (ciudad: string): Promise<string> => {
+  try {
+    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(ciudad)}&count=1&language=es&format=json`);
+    const geoData = await geoRes.json();
+
+    if (!geoData.results || geoData.results.length === 0) {
+      return `No se encontró información para la ubicación "${ciudad}".`;
+    }
+
+    const { latitude, longitude, name, country } = geoData.results[0];
+    const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`);
+    const weatherData = await weatherRes.json();
+
+    const temp = weatherData.current?.temperature_2m;
+    const humedad = weatherData.current?.relative_humidity_2m;
+    const viento = weatherData.current?.wind_speed_10m;
+
+    return JSON.stringify({
+      ciudad: name,
+      pais: country,
+      temperatura: `${temp}°C`,
+      humedad: `${humedad}%`,
+      viento: `${viento} km/h`
+    });
+  } catch (error) {
+    return "No se pudo consultar el clima en este momento.";
+  }
+};
+
+const obtenerHoraActual = () => {
+  const ahora = new Date();
+  return JSON.stringify({
+    fecha_actual: format(ahora, "d 'de' MMMM 'de' yyyy", { locale: es }),
+    hora_actual: format(ahora, "hh:mm:ss a"),
+    zona_horaria: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
+};
+
+const groqTools = [
+  {
+    type: "function",
+    function: {
+      name: "obtenerClimaCiudad",
+      description: "Obtiene el clima actual, temperatura, humedad y vientos de una ciudad específica del mundo.",
+      parameters: {
+        type: "object",
+        properties: {
+          ciudad: { type: "string", description: "Nombre de la ciudad (ej. 'Aguascalientes', 'Madrid')" }
+        },
+        required: ["ciudad"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "obtenerHoraActual",
+      description: "Obtiene la fecha actual, la hora exacta en tiempo real y la zona horaria.",
+      parameters: { type: "object", properties: {} }
+    }
+  }
+];
+
 export default function Index() {
   const [currentScreen, setCurrentScreen] = useState<'chat' | 'settings'>('chat');
   const [username, setUsername] = useState('Usuario');
@@ -52,6 +123,26 @@ export default function Index() {
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({
     visible: false, title: '', message: '', buttons: []
   });
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    Animated.timing(toastAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+
+    setTimeout(() => {
+      Animated.timing(toastAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setToastMessage(null));
+    }, 3500);
+  };
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -94,6 +185,7 @@ export default function Index() {
   const savePhotoToCache = async (uri: string) => {
     setUserPhoto(uri);
     await AsyncStorage.setItem(STORAGE_KEY_USERPHOTO, uri);
+    showToast("¡Foto de perfil actualizada con éxito!");
   };
 
   const showAlert = (title: string, message: string, buttons: AlertConfig['buttons'] = [{ text: 'OK' }]) => {
@@ -108,15 +200,15 @@ export default function Index() {
 
   const confirmClearMessages = () => {
     showAlert(
-      "Eliminar historial",
-      "¿Estás seguro de que quieres borrar todos los mensajes?",
+      "Limpiar conversación",
+      "¿Deseas borrar los mensajes actuales y empezar de nuevo?",
       [
         { text: "Cancelar", style: "cancel" },
         {
-          text: "Borrar todo",
+          text: "Sí, limpiar",
           style: "destructive",
           onPress: async () => {
-            const initialMsg: Message[] = [{ id: Date.now().toString(), text: '¡Hola! Soy Kimy.IA. ¿En qué puedo ayudarte hoy?', sender: 'kimy', timestamp: new Date() }];
+            const initialMsg: Message[] = [{ id: Date.now().toString(), text: '¡Conversación reiniciada! ¿En qué te puedo ayudar?', sender: 'kimy', timestamp: new Date() }];
             setMessages(initialMsg);
             await AsyncStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(initialMsg));
           }
@@ -128,7 +220,7 @@ export default function Index() {
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permissionResult.granted === false) {
-      showAlert("Permiso requerido", "Se necesitan permisos para acceder a la galería.");
+      showToast("Se necesitan permisos de galería para cambiar la foto.");
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -145,9 +237,15 @@ export default function Index() {
   const sendMessage = async () => {
     if (inputText.trim().length === 0 || isTyping) return;
     
-    const apiKey = getApiKey();
+    const { apiKey, model } = getGroqConfig();
     if (!apiKey) {
-      showAlert("Falta Configuración", "La API Key de Gemini no se detectó. Asegúrate de definir EXPO_PUBLIC_GEMINI_API_KEY en tu archivo .env");
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        text: "¡Hola! Por favor configura tu API Key de Groq en app.json o .env para continuar.",
+        sender: 'kimy',
+        timestamp: new Date()
+      }]);
+      setInputText('');
       return;
     }
 
@@ -160,23 +258,31 @@ export default function Index() {
     setIsTyping(true);
 
     try {
-      const recentHistory = updatedMessages.slice(-8).map(m => {
-        return `${m.sender === 'user' ? username : 'Kimy.IA'}: ${m.text}`;
-      }).join('\n');
+      const systemPrompt = `Eres Kimy.IA, una asistente virtual en español amigable, empática, educada y servicial desarrollada sobre Qwen. Te estás comunicando con ${username}. Tienes acceso a herramientas para consultar el clima actual y la hora en tiempo real. Si el usuario te pide información meteorológica o la hora actual, usa las herramientas correspondientes.`;
 
-      const promptConContexto =
-        `Eres Kimy.IA, una asistente virtual en español amigable, empática, educada y servicial. Te estás comunicando con ${username}.` +
-        `Tu tono debe ser natural, conversacional y agradable.` +
-        `\n\nHistorial reciente:\n${recentHistory}\n\nKimy.IA:`;
+      let apiMessages: any[] = [
+        { role: 'system', content: systemPrompt },
+        ...updatedMessages.slice(-8).map(m => ({
+          role: m.sender === 'user' ? 'user' : 'assistant',
+          content: m.text
+        }))
+      ];
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+        'https://api.groq.com/openai/v1/chat/completions',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: promptConContexto }] }],
-            generationConfig: { maxOutputTokens: 800, temperature: 0.7 }
+            model: model,
+            messages: apiMessages,
+            tools: groqTools,
+            tool_choice: "auto",
+            max_tokens: 800,
+            temperature: 0.7
           })
         }
       );
@@ -184,11 +290,56 @@ export default function Index() {
       if (!response.ok) {
         const errorBody = await response.text();
         console.error("Detalle del error de la API:", errorBody);
-        throw new Error(`Error en la conexión (Status: ${response.status})`);
+        throw new Error("Error de comunicación con el servicio.");
       }
 
       const data = await response.json();
-      const botResponseText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Lo siento, no recibí una respuesta válida.';
+      const responseMessage = data.choices?.[0]?.message;
+
+      let botResponseText = "";
+
+      if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
+        const toolCall = responseMessage.tool_calls[0];
+        const functionName = toolCall.function.name;
+        const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
+
+        let toolResult = "";
+        if (functionName === "obtenerClimaCiudad") {
+          toolResult = await obtenerClimaCiudad(functionArgs.ciudad);
+        } else if (functionName === "obtenerHoraActual") {
+          toolResult = obtenerHoraActual();
+        }
+
+        apiMessages.push(responseMessage);
+        apiMessages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          name: functionName,
+          content: toolResult,
+        });
+
+        const secondResponse = await fetch(
+          'https://api.groq.com/openai/v1/chat/completions',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: model,
+              messages: apiMessages,
+              max_tokens: 800,
+              temperature: 0.7
+            })
+          }
+        );
+
+        const secondData = await secondResponse.json();
+        botResponseText = secondData.choices?.[0]?.message?.content || 'Lo siento, no pude procesar los datos en este momento.';
+      } else {
+        botResponseText = responseMessage?.content || 'Lo siento, no recibí una respuesta válida.';
+      }
 
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
@@ -197,8 +348,12 @@ export default function Index() {
         timestamp: new Date()
       }]);
     } catch (error: any) {
-      console.error("Error:", error);
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), text: '¡Ups! Falló la conexión con la IA. Verifica tu llave o conexión.', sender: 'kimy', timestamp: new Date() }]);
+      setMessages(prev => [...prev, { 
+        id: (Date.now() + 1).toString(), 
+        text: 'Vaya, tuve un pequeño problema de conexión en este momento. Inténtalo de nuevo en unos segundos.', 
+        sender: 'kimy', 
+        timestamp: new Date() 
+      }]);
     } finally {
       setIsTyping(false);
     }
@@ -231,6 +386,16 @@ export default function Index() {
     </Modal>
   );
 
+  const ToastNotification = () => {
+    if (!toastMessage) return null;
+    return (
+      <Animated.View style={[styles.toastContainer, { opacity: toastAnim }]}>
+        <Ionicons name="information-circle" size={18} color="#fff" style={{ marginRight: 6 }} />
+        <Text style={styles.toastText}>{toastMessage}</Text>
+      </Animated.View>
+    );
+  };
+
   if (currentScreen === 'settings') {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -255,7 +420,7 @@ export default function Index() {
             )}
           </TouchableOpacity>
 
-          <Text style={styles.label}>Nombre de Usuario</Text>
+          <Text style={styles.label}>Tu Nombre</Text>
           <TextInput
             style={styles.settingsInput}
             value={username}
@@ -269,6 +434,7 @@ export default function Index() {
           </TouchableOpacity>
         </View>
         <NeonAlert />
+        <ToastNotification />
       </SafeAreaView>
     );
   }
@@ -282,7 +448,7 @@ export default function Index() {
           <Image source={BOT_IMAGE_LOCAL} style={styles.headerAvatar} />
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>Kimy.IA</Text>
-            <Text style={styles.headerStatus}>en línea</Text>
+            <Text style={styles.headerStatus}>en línea (Qwen)</Text>
           </View>
         </View>
         <View style={styles.headerActions}>
@@ -325,7 +491,7 @@ export default function Index() {
                   )}
                   <View style={[styles.messageRow, isUser ? styles.userRow : styles.kimyRow]}>
                     {isUser ? (
-                      userPhoto ? <Image source={{ uri: userPhoto } } style={styles.chatAvatarRow} />
+                      userPhoto ? <Image source={{ uri: userPhoto }} style={styles.chatAvatarRow} />
                       : <View style={[styles.chatAvatarRow, styles.rowPlaceholder]}><Ionicons name="person" size={16} color="#aaa" /></View>
                     ) : (
                       <Image source={BOT_IMAGE_LOCAL} style={styles.chatAvatarRow} />
@@ -344,7 +510,7 @@ export default function Index() {
           {isTyping && (
             <View style={styles.typingContainer}>
               <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.typingText}>Kimy.IA está pensando...</Text>
+              <Text style={styles.typingText}>Kimy.IA está escribiendo...</Text>
             </View>
           )}
 
@@ -352,10 +518,10 @@ export default function Index() {
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
-                placeholder="Escribe un mensaje..."
+                placeholder="Hazme una pregunta..."
                 placeholderTextColor="rgba(255,255,255,0.6)"
                 value={inputText}
-                onChangeText={setInputText}
+                onChangeText={inputText => setInputText(inputText)}
                 multiline
               />
               <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
@@ -366,62 +532,7 @@ export default function Index() {
         </LinearGradient>
       </KeyboardAvoidingView>
       <NeonAlert />
+      <ToastNotification />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#000',
-    borderBottomWidth: 1, borderBottomColor: '#FF1493'
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerAvatar: { width: 38, height: 38, borderRadius: 19, marginRight: 10, borderWidth: 1, borderColor: '#FF1493' },
-  headerTextContainer: { justifyContent: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
-  headerStatus: { fontSize: 12, color: '#FF1493' },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
-  actionIcon: { marginLeft: 16, padding: 4 },
-  backButton: { padding: 4 },
-  chatContainer: { flex: 1 },
-  listContent: { paddingHorizontal: 16, paddingVertical: 10 },
-  dateContainer: { alignItems: 'center', marginVertical: 10 },
-  dateText: { fontSize: 12, color: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  messageRow: { flexDirection: 'row', marginVertical: 6, alignItems: 'flex-end' },
-  userRow: { justifyContent: 'flex-end' },
-  kimyRow: { justifyContent: 'flex-start' },
-  chatAvatarRow: { width: 30, height: 30, borderRadius: 15, marginHorizontal: 8 },
-  rowPlaceholder: { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
-  bubble: { maxWidth: '75%', padding: 12, borderRadius: 16 },
-  userBubble: { backgroundColor: 'rgba(255, 20, 147, 0.8)', borderBottomRightRadius: 4 },
-  kimyBubble: { backgroundColor: 'rgba(0, 0, 255, 0.7)', borderBottomLeftRadius: 4 },
-  usernameTag: { fontSize: 11, fontWeight: 'bold', color: '#FFD700', marginBottom: 2 },
-  messageText: { fontSize: 14, color: '#fff' },
-  timeText: { fontSize: 9, color: 'rgba(255,255,255,0.7)', alignSelf: 'flex-end', marginTop: 4 },
-  typingContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6 },
-  typingText: { marginLeft: 8, fontSize: 12, color: 'rgba(255,255,255,0.8)', fontStyle: 'italic' },
-  footer: { padding: 10, backgroundColor: 'transparent' },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 25, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
-  input: { flex: 1, color: '#fff', maxHeight: 100, fontSize: 14, paddingVertical: 6 },
-  sendButton: { backgroundColor: '#FF1493', justifyContent: 'center', alignItems: 'center', width: 36, height: 36, borderRadius: 18, marginLeft: 8 },
-  settingsContent: { flex: 1, padding: 20, alignItems: 'center', backgroundColor: '#000' },
-  avatarContainerSettings: { marginBottom: 25, marginTop: 10 },
-  settingsAvatarPreview: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: '#FF1493' },
-  avatarPlaceholderSettings: { backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  placeholderTextSettings: { color: '#fff', fontSize: 11, marginTop: 4 },
-  label: { alignSelf: 'flex-start', color: '#fff', fontSize: 14, fontWeight: 'bold', marginBottom: 8 },
-  settingsInput: { width: '100%', backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 10, padding: 12, color: '#fff', fontSize: 15, marginBottom: 20 },
-  saveButton: { width: '100%', backgroundColor: '#00FFCC', padding: 14, borderRadius: 10, alignItems: 'center' },
-  saveButtonText: { color: '#000', fontWeight: 'bold', fontSize: 15 },
-  alertOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  alertBox: { width: '80%', backgroundColor: '#1A1A2E', borderRadius: 15, padding: 20, borderWidth: 1, borderColor: '#FF1493', alignItems: 'center' },
-  alertTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 10, textAlign: 'center' },
-  alertMessage: { fontSize: 14, color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginBottom: 20 },
-  alertButtonsContainer: { flexDirection: 'row', justifyContent: 'space-around', width: '100%' },
-  alertButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8, backgroundColor: '#0000FF' },
-  alertBtnDestructive: { backgroundColor: '#FF3B30' },
-  alertButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  alertBtnCancelText: { color: '#ccc' }
-});

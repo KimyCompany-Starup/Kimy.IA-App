@@ -2,7 +2,7 @@
   "expo": {
     "name": "Kimy.IA",
     "slug": "Kimy-IA",
-    "version": "V2.7",
+    "version": "V3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kimyia",
@@ -35,7 +35,8 @@
           "imageWidth": 76
         }
       ],
-      "expo-image"
+      "expo-image",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -45,7 +46,9 @@
       "router": {},
       "eas": {
         "projectId": "93b07d3b-6eb9-4605-916b-81e0abd7f83e"
-      }
+      },
+      "expoPublicGroqApiKey": "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",
+      "expoPublicGroqModel": "qwen/qwen3.8-27b"
     }
   }
 }
