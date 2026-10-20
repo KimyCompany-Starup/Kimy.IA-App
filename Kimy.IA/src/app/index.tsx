@@ -11,14 +11,14 @@ import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { styles } from '../styles'; // Asegúrate de haber movido styles.ts fuera de src/app/
+import { styles } from '../styles';
 
-// --- Configuración Dinámica desde Constants (app.json / .env) ---
+// --- Configuración Dinámica para Groq ---
 const getGroqConfig = () => {
   const extra = Constants.expoConfig?.extra || {};
   
-  const apiKey = (extra.expoPublicGroqApiKey || process.env.EXPO_PUBLIC_GROQ_API_KEY || "").trim();
-  const model = (extra.expoPublicGroqModel || process.env.EXPO_PUBLIC_GROQ_MODEL || "qwen/qwen3.8-27b").trim();
+  const apiKey = (extra.EXPO_PUBLIC_GROQ_API_KEY || process.env.EXPO_PUBLIC_GROQ_API_KEY || "").trim();
+  const model = (extra.EXPO_PUBLIC_GROQ_MODEL || process.env.EXPO_PUBLIC_GROQ_MODEL || "qwen/qwen3.8-27b").trim();
 
   return { apiKey, model };
 };
@@ -234,6 +234,7 @@ export default function Index() {
     }
   };
 
+  // Función principal optimizada con 6 reintentos automáticos
   const sendMessage = async () => {
     if (inputText.trim().length === 0 || isTyping) return;
     
@@ -241,7 +242,7 @@ export default function Index() {
     if (!apiKey) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
-        text: "¡Hola! Por favor configura tu API Key de Groq en app.json o .env para continuar.",
+        text: "¡Hola! Por favor configura tu servicio para continuar.",
         sender: 'kimy',
         timestamp: new Date()
       }]);
@@ -257,68 +258,26 @@ export default function Index() {
     setInputText('');
     setIsTyping(true);
 
-    try {
-      const systemPrompt = `Eres Kimy.IA, una asistente virtual en español amigable, empática, educada y servicial desarrollada sobre Qwen. Te estás comunicando con ${username}. Tienes acceso a herramientas para consultar el clima actual y la hora en tiempo real. Si el usuario te pide información meteorológica o la hora actual, usa las herramientas correspondientes.`;
+    const systemPrompt = `Eres Kimy.IA, una asistente virtual en español amigable, empática, educada y servicial desarrollada sobre Qwen. Te estás comunicando con ${username}. Tienes acceso a herramientas para consultar el clima actual y la hora en tiempo real. Si el usuario te pide información meteorológica o la hora actual, usa las herramientas correspondientes.`;
 
-      let apiMessages: any[] = [
-        { role: 'system', content: systemPrompt },
-        ...updatedMessages.slice(-8).map(m => ({
-          role: m.sender === 'user' ? 'user' : 'assistant',
-          content: m.text
-        }))
-      ];
+    let apiMessages: any[] = [
+      { role: 'system', content: systemPrompt },
+      ...updatedMessages.slice(-8).map(m => ({
+        role: m.sender === 'user' ? 'user' : 'assistant',
+        content: m.text
+      }))
+    ];
 
-      const response = await fetch(
-        'https://api.groq.com/openai/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: apiMessages,
-            tools: groqTools,
-            tool_choice: "auto",
-            max_tokens: 800,
-            temperature: 0.7
-          })
-        }
-      );
+    const maxRetries = 6;
+    let attempt = 0;
+    let success = false;
+    let botResponseText = "";
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error("Detalle del error de la API:", errorBody);
-        throw new Error("Error de comunicación con el servicio.");
-      }
+    while (attempt < maxRetries && !success) {
+      try {
+        attempt++;
 
-      const data = await response.json();
-      const responseMessage = data.choices?.[0]?.message;
-
-      let botResponseText = "";
-
-      if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
-        const toolCall = responseMessage.tool_calls[0];
-        const functionName = toolCall.function.name;
-        const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
-
-        let toolResult = "";
-        if (functionName === "obtenerClimaCiudad") {
-          toolResult = await obtenerClimaCiudad(functionArgs.ciudad);
-        } else if (functionName === "obtenerHoraActual") {
-          toolResult = obtenerHoraActual();
-        }
-
-        apiMessages.push(responseMessage);
-        apiMessages.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          name: functionName,
-          content: toolResult,
-        });
-
-        const secondResponse = await fetch(
+        const response = await fetch(
           'https://api.groq.com/openai/v1/chat/completions',
           {
             method: 'POST',
@@ -329,34 +288,90 @@ export default function Index() {
             body: JSON.stringify({
               model: model,
               messages: apiMessages,
+              tools: groqTools,
+              tool_choice: "auto",
               max_tokens: 800,
               temperature: 0.7
             })
           }
         );
 
-        const secondData = await secondResponse.json();
-        botResponseText = secondData.choices?.[0]?.message?.content || 'Lo siento, no pude procesar los datos en este momento.';
-      } else {
-        botResponseText = responseMessage?.content || 'Lo siento, no recibí una respuesta válida.';
-      }
+        if (!response.ok) {
+          throw new Error("Error de comunicación");
+        }
 
+        const data = await response.json();
+        const responseMessage = data.choices?.[0]?.message;
+
+        if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
+          const toolCall = responseMessage.tool_calls[0];
+          const functionName = toolCall.function.name;
+          const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
+
+          let toolResult = "";
+          if (functionName === "obtenerClimaCiudad") {
+            toolResult = await obtenerClimaCiudad(functionArgs.ciudad);
+          } else if (functionName === "obtenerHoraActual") {
+            toolResult = obtenerHoraActual();
+          }
+
+          apiMessages.push(responseMessage);
+          apiMessages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            name: functionName,
+            content: toolResult,
+          });
+
+          const secondResponse = await fetch(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify({
+                model: model,
+                messages: apiMessages,
+                max_tokens: 800,
+                temperature: 0.7
+              })
+            }
+          );
+
+          const secondData = await secondResponse.json();
+          botResponseText = secondData.choices?.[0]?.message?.content || 'Lo siento, no pude procesar los datos en este momento.';
+        } else {
+          botResponseText = responseMessage?.content || 'Lo siento, no recibí una respuesta válida.';
+        }
+
+        success = true;
+      } catch (error) {
+        console.warn(`Intento ${attempt} fallido en Kimy.IA. Reintentando...`);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+
+    if (success) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         text: botResponseText.trim(),
         sender: 'kimy',
         timestamp: new Date()
       }]);
-    } catch (error: any) {
+    } else {
       setMessages(prev => [...prev, { 
         id: (Date.now() + 1).toString(), 
-        text: 'Vaya, tuve un pequeño problema de conexión en este momento. Inténtalo de nuevo en unos segundos.', 
+        text: 'Vaya, tuve un pequeño problema de conexión. Por favor, verifica tu internet e inténtalo de nuevo en unos instantes.', 
         sender: 'kimy', 
         timestamp: new Date() 
       }]);
-    } finally {
-      setIsTyping(false);
     }
+
+    setIsTyping(false);
   };
 
   const NeonAlert = () => (
